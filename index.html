@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- [핵심 치트키]: 구글 TTS API 403 차단을 원천 해제하고 100% 원어민 사운드를 우회 송출하기 위한 referrer 제어 설정 -->
+    <meta name="referrer" content="no-referrer">
+    <title>루비반의 협동 대본 분석기</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 구글 폰트: 고운돋움 단일 적용 -->
+    <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum:wght@400;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body, button, input, textarea, select {
+            font-family: 'Gowun Dodum', sans-serif !important;
+        }
+        .no-select {
+            -webkit-user-drag: none;
+            user-select: none;
+            -moz-user-select: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+        }
+    </style>
+
+    <!-- ⚠️ [물리 복구 치트키 - 동적 로드 에러 방어]: 이미지 로딩 실패 즉시 동작하도록 전역 함수를 head에 우선 배치 -->
+    <script>
+        window.showFallbackMascot = function(imgEl) {
+            imgEl.style.display = 'none';
+            var fallback = imgEl.nextElementSibling;
+            if (fallback) {
+                fallback.classList.remove('hidden');
+            }
+        };
+    </script>
+</head>
+<body class="bg-rose-50/30 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- 헤더 -->
+    <header class="bg-gradient-to-r from-pink-500 via-rose-500 to-indigo-500 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <!-- [캐릭터 업그레이드]: 실물 루비몬 이미지 탑재 (실패 시 예쁜 SVG 백업 작동) -->
+                <div class="bg-white p-1 rounded-2xl shadow-inner shrink-0 relative w-14 h-14 flex items-center justify-center overflow-hidden">
+                    <img src="rubymon.png" alt="루비몬" class="w-12 h-12 object-contain animate-bounce" onerror="window.showFallbackMascot(this)">
+                    <div class="fallback-mascot hidden">
+                        <svg class="w-12 h-12" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M50 8 L88 45 L50 92 L12 45 Z" fill="#F43F5E" />
+                            <path d="M50 8 L72 45 L50 92 L28 45 Z" fill="#FDA4AF" />
+                            <circle cx="41" cy="45" r="5" fill="#1E293B"/>
+                            <circle cx="59" cy="45" r="5" fill="#1E293B"/>
+                            <circle cx="43" cy="43" r="1.8" fill="white"/>
+                            <circle cx="61" cy="43" r="1.8" fill="white"/>
+                            <circle cx="35" cy="53" r="5.5" fill="#FECDD3" opacity="0.85"/>
+                            <circle cx="65" cy="53" r="5.5" fill="#FECDD3" opacity="0.85"/>
+                            <path d="M47 52 Q50 56 53 52" stroke="#1E293B" stroke-width="3" stroke-linecap="round" fill="none"/>
+                        </svg>
+                    </div>
+                </div>
+                <div>
+                    <h1 class="text-2xl sm:text-3xl font-bold tracking-wider">💎 루비반의 협동 대본 분석기</h1>
+                    <p class="text-xs text-rose-100 font-medium">우리 모둠 대본을 공유하고 신기한 AI 목소리로 들어봐요!</p>
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- [보안 업그레이드]: API 키 설정 버튼 (교사만 등록) -->
+                <button id="btn-api-settings" class="flex items-center gap-1.5 bg-white/20 hover:bg-white/35 px-4 py-2 rounded-full text-xs sm:text-sm border border-white/30 backdrop-blur-sm transition transform active:scale-95">
+                    <i class="fa-solid fa-key"></i>
+                    <span id="btn-api-text" class="font-bold">🔑 AI 분석국 설정 (교사용)</span>
+                </button>
+                <div class="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-full text-xs sm:text-sm border border-white/30 backdrop-blur-sm">
+                    <span id="connection-dot" class="inline-block w-2.5 h-2.5 bg-amber-400 rounded-full animate-pulse"></span>
+                    <span id="connection-status" class="font-bold">연결 확인 중...</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 교사 전용 실시간 자동 분석 제어 패널 (API 키 등록 시 노출) -->
+    <section id="teacher-dashboard-panel" class="hidden bg-amber-50 border-b border-amber-200 px-4 py-3 shadow-inner">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div class="flex items-center gap-2.5 text-amber-800 text-sm">
+                <div class="animate-spin rounded-full h-4 w-4 border-2 border-amber-600 border-t-transparent shrink-0"></div>
+                <p class="font-bold">📡 실시간 AI 분석 중계소 가동 중 (학생들이 올리는 대본을 자동 번역하고 있습니다)</p>
+            </div>
+            <div class="text-xs text-amber-700 bg-amber-100 px-3.5 py-1 rounded-full font-bold">
+                분석 대기 중인 대본: <span id="pending-count-badge" class="text-rose-600">0</span>개
+            </div>
+        </div>
+    </section>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- 왼쪽 사이드바 -->
+        <section class="lg:col-span-4 flex flex-col gap-6">
+            
+            <!-- [캐릭터 업그레이드]: 루비몬의 다정한 환영 말풍선 안내 카드 (실물 이미지 적용 및 SVG 자동 Fallback) -->
+            <div class="bg-white p-4 rounded-3xl shadow-sm border border-rose-100 flex items-center gap-4 relative overflow-hidden">
+                <div class="shrink-0 bg-rose-50 p-1.5 rounded-2xl w-16 h-16 flex items-center justify-center overflow-hidden">
+                    <img src="rubymon.png" alt="루비몬 요정" class="w-14 h-14 object-contain" onerror="window.showFallbackMascot(this)">
+                    <div class="fallback-mascot hidden">
+                        <svg class="w-14 h-14" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M50 10 L85 45 L50 85 L15 45 Z" fill="#F43F5E" />
+                            <path d="M50 10 L70 45 L50 85 L30 45 Z" fill="#FDA4AF" />
+                            <circle cx="42" cy="45" r="4.5" fill="#1E293B"/>
+                            <circle cx="58" cy="45" r="4.5" fill="#1E293B"/>
+                            <circle cx="44" cy="43" r="1.5" fill="white"/>
+                            <circle cx="60" cy="43" r="1.5" fill="white"/>
+                            <circle cx="37" cy="52" r="5" fill="#FECDD3" opacity="0.8"/>
+                            <circle cx="63" cy="52" r="5" fill="#FECDD3" opacity="0.8"/>
+                            <path d="M47 51 Q50 55 53 51" stroke="#1E293B" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="relative flex-grow">
+                    <div class="absolute -left-2 top-4 w-2.5 h-2.5 bg-rose-50 rotate-45 border-l border-b border-rose-100/40"></div>
+                    <div class="bg-rose-50/70 p-3.5 rounded-2xl border border-rose-100/30 text-xs text-rose-950 leading-relaxed">
+                        <span class="font-bold text-rose-600 block mb-0.5">💖 대본 요정 루비몬:</span>
+                        "안녕! 난 대본 도우미 <strong class="text-rose-600">붉은 유령</strong>이야. 모둠 대본을 올리면, 함께 읽을 수 있도록 발음과 뜻을 알려줄게! ✨"
+                    </div>
+                </div>
+            </div>
+
+            <!-- 모둠 선택/설정 -->
+            <div class="bg-white p-5 rounded-3xl shadow-sm border border-rose-100">
+                <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-rose-600">
+                    <i class="fa-solid fa-star"></i> 우리 모둠 선택하기
+                </h2>
+                <div class="grid grid-cols-4 gap-2 mb-4" id="group-selector"></div>
+                <div class="bg-rose-50 p-3.5 rounded-2xl flex items-center gap-3 border border-rose-100/50">
+                    <div class="bg-rose-500 text-white p-2 rounded-xl font-bold text-sm shrink-0" id="current-group-badge">1모둠</div>
+                    <p class="text-xs text-rose-900 leading-tight">
+                        내가 속한 모둠을 골라주세요! 그 다음 대본 사진을 등록하면 우리 모둠 공간에 실시간으로 공유됩니다.
+                    </p>
+                </div>
+            </div>
+
+            <!-- 대본 사진 업로드 및 분석 요청 -->
+            <div class="bg-white p-5 rounded-3xl shadow-sm border border-rose-100 flex-grow flex flex-col">
+                <h2 class="text-lg font-bold mb-3 flex items-center gap-2 text-rose-600">
+                    <i class="fa-solid fa-file-image"></i> 대본 이미지 올리기
+                </h2>
+                
+                <div class="flex border-b border-rose-100 mb-4 text-sm font-semibold">
+                    <button id="tab-file-btn" class="flex-1 py-2 text-center border-b-2 border-rose-500 text-rose-600">내 파일에서 올리기</button>
+                    <button id="tab-sample-btn" class="flex-1 py-2 text-center border-b-2 border-transparent text-slate-400 hover:text-slate-600">연습용 대본 선택</button>
+                </div>
+
+                <div id="upload-file-area" class="space-y-4">
+                    <label class="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-rose-200 hover:border-rose-400 rounded-2xl cursor-pointer bg-rose-50/10 hover:bg-rose-50/30 transition relative overflow-hidden group">
+                        <div class="flex flex-col items-center justify-center pt-5 pb-6 px-4 text-center" id="upload-placeholder">
+                            <i class="fa-solid fa-camera-retro text-4xl text-rose-300 mb-3 group-hover:scale-110 transition-transform"></i>
+                            <p class="mb-1 text-sm text-slate-600 font-bold">카메라 사진 또는 이미지 선택</p>
+                            <p class="text-xs text-slate-400">대본을 예쁘게 찍어서 올려주세요!</p>
+                        </div>
+                        <img id="image-preview" class="hidden absolute inset-0 w-full h-full object-contain bg-slate-900" alt="미리보기" />
+                        <input id="file-input" type="file" accept="image/*" class="hidden" />
+                    </label>
+                </div>
+
+                <div id="upload-sample-area" class="hidden space-y-3">
+                    <p class="text-xs text-slate-500">루비반 친구들이 바로 테스트해볼 수 있는 신기한 다국어 샘플 대본이에요.</p>
+                    <div class="grid grid-cols-1 gap-2">
+                        <button type="button" class="sample-btn text-left p-3 rounded-2xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 transition flex items-center gap-3" data-lang="ur">
+                            <span class="text-2xl">🇵🇰</span>
+                            <div>
+                                <p class="text-sm font-bold text-indigo-600">★ 우르두어 발음 대본</p>
+                                <p class="text-xs text-slate-500 truncate">"میں نو سال کا ہوں [Main nau saal ka hoon]"</p>
+                            </div>
+                        </button>
+                        <button type="button" class="sample-btn text-left p-3 rounded-2xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 transition flex items-center gap-3" data-lang="vi">
+                            <span class="text-2xl">🇻🇳</span>
+                            <div>
+                                <p class="text-sm font-bold text-rose-500">★ 베트남어 발음 대본</p>
+                                <p class="text-xs text-slate-500 truncate">"Xin chào! 깜온! 만나서 반가워요."</p>
+                            </div>
+                        </button>
+                        <button type="button" class="sample-btn text-left p-3 rounded-2xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 transition flex items-center gap-3" data-lang="zh">
+                            <span class="text-2xl">🇨🇳</span>
+                            <div>
+                                <p class="text-sm font-bold text-emerald-600">★ 중국어 발음 대본</p>
+                                <p class="text-xs text-slate-500 truncate">"니하오! 하오지우부지엔. 워팅하오더."</p>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">대본 한 줄 설명</label>
+                    <input type="text" id="script-desc" placeholder="예: 루비반 3모둠의 낭독회 발표 대본입니다!" class="w-full px-4 py-2.5 text-sm rounded-2xl border border-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:border-transparent" />
+                </div>
+
+                <button id="upload-submit-btn" class="mt-5 w-full bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold py-3.5 px-4 rounded-2xl shadow-lg shadow-rose-200 flex items-center justify-center gap-2 transition transform active:scale-95 disabled:opacity-50">
+                    <i class="fa-solid fa-share-nodes"></i>
+                    <span id="submit-btn-text">우리 모둠 대본 공유하기</span>
+                </button>
+
+                <div id="loading-spinner" class="hidden mt-4 p-4 bg-amber-50 rounded-2xl border border-amber-200">
+                    <div class="flex items-center gap-3">
+                        <div class="animate-spin rounded-full h-5 w-5 border-2 border-amber-600 border-t-transparent"></div>
+                        <p class="text-xs font-bold text-amber-800" id="loading-text">우리 모둠 공간에 대본 공유 및 대기 중...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 오른쪽 메인 콘텐츠 영역 -->
+        <section class="lg:col-span-8 flex flex-col gap-6">
+            <div class="bg-white p-2.5 rounded-3xl shadow-sm border border-rose-100 flex items-center justify-between overflow-x-auto">
+                <div class="flex gap-1.5" id="feed-filter-tabs"></div>
+            </div>
+
+            <div class="space-y-6" id="script-feed">
+                <!-- [캐릭터 업그레이드]: 피드가 비어있을 때 뜨는 사랑스러운 대기용 실물 루비몬 캐릭터 (실패 시 SVG 백업) -->
+                <div class="bg-white rounded-3xl p-12 text-center border border-rose-100 shadow-sm" id="empty-feed-placeholder">
+                    <div class="w-32 h-32 mx-auto mb-4 flex items-center justify-center overflow-hidden">
+                        <img src="rubymon.png" alt="루비몬 기다림" class="w-28 h-28 object-contain animate-pulse" onerror="window.showFallbackMascot(this)">
+                        <div class="fallback-mascot hidden">
+                            <svg class="w-20 h-20 animate-pulse" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M50 15 L80 45 L50 80 L20 45 Z" fill="#F43F5E" />
+                                <path d="M50 15 L65 45 L50 80 L35 45 Z" fill="#FDA4AF" />
+                                <circle cx="42" cy="46" r="4" fill="#1E293B"/>
+                                <path d="M54 46 Q58 43 62 46" stroke="#1E293B" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+                                <circle cx="38" cy="52" r="4.5" fill="#FECDD3" opacity="0.8"/>
+                                <circle cx="62" cy="52" r="4.5" fill="#FECDD3" opacity="0.8"/>
+                                <path d="M48 53 Q50 51 52 53" stroke="#1E293B" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <p class="text-slate-600 font-bold text-lg">아직 등록된 멋진 대본이 없어요!</p>
+                    <p class="text-xs text-slate-400 mt-1">왼쪽 대본 등록기에서 첫 번째 대본을 올려 공유해 보세요!</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 원본 이미지 확대 및 드래그 팬 모달 -->
+    <div id="image-modal" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 flex flex-col justify-between p-4">
+        <div class="w-full max-w-6xl mx-auto flex justify-between items-center bg-slate-900/80 px-4 py-3 rounded-2xl border border-slate-800 text-white">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-gem text-rose-500"></i>
+                <h3 class="font-bold text-sm" id="modal-title">대본 이미지 원본</h3>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2 bg-slate-800 rounded-xl px-3 py-1 text-xs">
+                    <button id="btn-zoom-out" class="hover:text-rose-400 p-1"><i class="fa-solid fa-minus"></i></button>
+                    <span id="zoom-factor-label" class="font-mono w-12 text-center">100%</span>
+                    <button id="btn-zoom-in" class="hover:text-rose-400 p-1"><i class="fa-solid fa-plus"></i></button>
+                    <button id="btn-zoom-reset" class="ml-1 px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[10px]"><i class="fa-solid fa-rotate-left"></i></button>
+                </div>
+                <button id="modal-close-btn" class="text-slate-400 hover:text-white bg-slate-800/80 p-2 rounded-xl">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+        </div>
+
+        <div id="modal-viewport" class="flex-grow w-full max-w-6xl mx-auto my-4 overflow-hidden rounded-3xl bg-slate-950 border border-slate-800/60 relative cursor-grab active:cursor-grabbing flex justify-center items-center">
+            <div id="modal-zoom-container" class="absolute transition-transform duration-75 ease-out origin-center flex justify-center items-center" style="transform: translate(0px, 0px) scale(1);">
+                <img id="modal-image" class="max-h-[80vh] max-w-[90vw] object-contain rounded-xl no-select" src="" alt="대본 이미지 원본" />
+            </div>
+        </div>
+    </div>
+
+    <!-- 삭제 확인 모달 -->
+    <div id="delete-confirm-modal" class="hidden fixed inset-0 bg-slate-900/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-rose-50 flex flex-col gap-4">
+            <div class="flex items-center gap-3 text-rose-500">
+                <div class="bg-rose-50 p-2.5 rounded-2xl"><i class="fa-solid fa-trash-can text-xl"></i></div>
+                <!-- [문구 보완]: 모둠별 귀속 강조 및 교육적인 안내 유도 -->
+                <h3 class="font-bold text-xl text-slate-800">우리 모둠 대본을 삭제할까요?</h3>
+            </div>
+            <p class="text-sm text-slate-600 leading-relaxed">잘못 올렸거나 공유를 원하지 않는 경우에만 삭제해 주세요. 삭제하면 모든 친구들의 화면에서도 함께 사라집니다.</p>
+            <div class="flex gap-2 justify-end mt-2">
+                <button id="delete-cancel-btn" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-sm">아니요</button>
+                <button id="delete-confirm-btn" class="px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-2xl text-sm">네, 지울래요</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- [보안 업그레이드]: API 키 설정 모달 (교사만 입력) -->
+    <div id="api-key-modal" class="hidden fixed inset-0 bg-slate-900/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-rose-50 flex flex-col gap-4">
+            <div class="flex items-center gap-3 text-rose-500">
+                <div class="bg-rose-50 p-2.5 rounded-2xl"><i class="fa-solid fa-key text-xl"></i></div>
+                <h3 class="font-bold text-xl text-slate-800">교사용 AI 분석 허브 설정</h3>
+            </div>
+            <p class="text-sm text-slate-600 leading-relaxed">
+                구글 Gemini API 키를 안전하게 한 번만 등록해 주세요.
+                <!-- [문구 보완]: 과도한 수식어구 배제 및 담백한 신뢰도 상승 유도 -->
+                선생님 기기가 켜져 있으면, 아이들이 등록하는 대본 사진을 백그라운드에서 실시간으로 자동 분석해 줍니다!
+            </p>
+            <div class="mt-2">
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">구글 Gemini API Key 입력</label>
+                <div class="relative">
+                    <input type="password" id="input-api-key" placeholder="AIzaSy..." class="w-full px-4 py-2.5 pr-10 text-sm rounded-2xl border border-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:border-transparent" />
+                    <button id="btn-toggle-key-visibility" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                        <i class="fa-solid fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="flex gap-2 justify-end mt-2">
+                <button id="api-key-cancel-btn" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-sm">닫기</button>
+                <button id="api-key-save-btn" class="px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-2xl text-sm">중계소 활성화</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
+
+    <!-- 고품질 원어민 음성 합성을 지원하는 대표적인 다국어 TTS CDN 이식 -->
+    <script src="https://code.responsivevoice.org/responsivevoice.js?key=819777YF"></script>
+
+    <!-- Firebase SDK (안정성 보장 v10 최신 적용) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDM38fxyg4LpMROCzl4gOgd9Aa-ZTcMwZU",
+            authDomain: "ruby-class-d9cf6.firebaseapp.com",
+            projectId: "ruby-class-d9cf6",
+            storageBucket: "ruby-class-d9cf6.appspot.com",
+            messagingSenderId: "717536933577",
+            appId: "1:717536933577:web:0d814c2f2c23a00607bf18"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const groups = [
+            { id: 'group1', name: '1모둠', color: 'bg-rose-500', text: 'text-rose-500' },
+            { id: 'group2', name: '2모둠', color: 'bg-emerald-500', text: 'text-emerald-500' },
+            { id: 'group3', name: '3모둠', color: 'bg-amber-500', text: 'text-amber-500' },
+            { id: 'group4', name: '4모둠', color: 'bg-indigo-500', text: 'text-indigo-500' }
+        ];
+
+        let selectedMyGroup = 'group1'; 
+        let activeFilterGroup = 'all';  
+        let selectedImageDataUrl = null; 
+        let sharedScripts = []; 
+        let scriptIdToDelete = null; 
+        let selectedSourceType = 'file';
+        let selectedSampleLanguage = '';
+        let isSubmitting = false; // 중복 클릭 방지용 불리언 플래그
+
+        let zoomScale = 1.0;
+        let panX = 0, panY = 0;
+        let isDragging = false;
+        let startX = 0, startY = 0;
+
+        const sampleTextTemplates = {
+            ur: `میں نو سال کا ہوں [Main nau saal ka hoon]\nآپ کی عمر کیا ہے؟ [Aap ki umar kya hai?]`,
+            vi: `민우: Xin chào! 베트남에 온 걸 환영해.\n지민: Xin chào! 진짜 만나서 반갑다.`,
+            zh: `장웨이: 你好! 하오지우부지엔.\n리화: 你好! 워팅하오더.`
+        };
+
+        let groupSelector, currentGroupBadge, fileInput, imagePreview, uploadPlaceholder;
+        let scriptDescInput, uploadSubmitBtn, loadingSpinner, loadingText, connectionDot, connectionStatus;
+        let feedFilterTabs, scriptFeed, emptyFeedPlaceholder, deleteConfirmModal;
+        let imageModal, modalViewport, modalZoomContainer, modalImage, modalTitle, modalCloseBtn;
+        let btnZoomIn, btnZoomOut, btnZoomReset, zoomFactorLabel;
+
+        // [보안 및 실시간 분석 자동화 변수]
+        let btnApiSettings, apiKeyModal, inputApiKey, btnToggleKeyVisibility, apiKeyCancelBtn, apiKeySaveBtn;
+        let teacherDashboardPanel, pendingCountBadge, btnApiText;
+
+        let globalAudioCtx = null;
+        let browserVoices = [];
+
+        // ⚠️ [물리 무음 버퍼 생성기]
+        function createSilentWav(durationSeconds) {
+            const sampleRate = 8000;
+            const numChannels = 1;
+            const bitsPerSample = 8;
+            const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+            const blockAlign = numChannels * (bitsPerSample / 8);
+            const dataSize = Math.floor(durationSeconds * byteRate);
+            const fileSize = 36 + dataSize;
+
+            const buffer = new ArrayBuffer(44 + dataSize);
+            const view = new DataView(buffer);
+
+            // "RIFF"
+            view.setUint32(0, 0x52494646, false);
+            view.setUint32(4, fileSize, true);
+            // "WAVE"
+            view.setUint32(8, 0x57415645, false);
+            // "fmt "
+            view.setUint32(12, 0x666d7420, false);
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true); // PCM
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, byteRate, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, bitsPerSample, true);
+            // "data"
+            view.setUint32(36, 0x64617461, false);
+            view.setUint32(40, dataSize, true);
+
+            for (let i = 0; i < dataSize; i++) {
+                view.setUint8(44 + i, 128);
+            }
+
+            const blob = new Blob([buffer], { type: 'audio/wav' });
+            return URL.createObjectURL(blob);
+        }
+
+        // ⚠️ [보완 완료 ①] 초정밀 초경량 이미지 압축 가공 엔진 탑재 (가로 최대 1400px, 퀄리티 0.8 압축으로 상향 세팅)
+        function compressImage(base64Str, maxWidth = 1400, quality = 0.8) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.src = base64Str;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+
+                    // 가로가 설정된 최대폭보다 큰 경우 종횡비를 맞춰 리사이징
+                    if (width > maxWidth) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // JPEG로 압축율 80% 설정하여 선명한 고품질 압축 데이터 반환
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+                    resolve(compressedBase64);
+                };
+                img.onerror = () => {
+                    resolve(base64Str); // 오작동 시 원본 보존 폴백
+                };
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            groupSelector = document.getElementById('group-selector');
+            currentGroupBadge = document.getElementById('current-group-badge');
+            fileInput = document.getElementById('file-input');
+            imagePreview = document.getElementById('image-preview');
+            uploadPlaceholder = document.getElementById('upload-placeholder');
+            scriptDescInput = document.getElementById('script-desc');
+            uploadSubmitBtn = document.getElementById('upload-submit-btn');
+            loadingSpinner = document.getElementById('loading-spinner');
+            loadingText = document.getElementById('loading-text');
+            connectionDot = document.getElementById('connection-dot');
+            connectionStatus = document.getElementById('connection-status');
+            feedFilterTabs = document.getElementById('feed-filter-tabs');
+            scriptFeed = document.getElementById('script-feed');
+            emptyFeedPlaceholder = document.getElementById('empty-feed-placeholder');
+            deleteConfirmModal = document.getElementById('delete-confirm-modal');
+            imageModal = document.getElementById('image-modal');
+            modalViewport = document.getElementById('modal-viewport');
+            modalZoomContainer = document.getElementById('modal-zoom-container');
+            modalImage = document.getElementById('modal-image');
+            modalTitle = document.getElementById('modal-title');
+            modalCloseBtn = document.getElementById('modal-close-btn');
+            btnZoomIn = document.getElementById('btn-zoom-in');
+            btnZoomOut = document.getElementById('btn-zoom-out');
+            btnZoomReset = document.getElementById('btn-zoom-reset');
+            zoomFactorLabel = document.getElementById('zoom-factor-label');
+
+            btnApiSettings = document.getElementById('btn-api-settings');
+            apiKeyModal = document.getElementById('api-key-modal');
+            inputApiKey = document.getElementById('input-api-key');
+            btnToggleKeyVisibility = document.getElementById('btn-toggle-key-visibility');
+            apiKeyCancelBtn = document.getElementById('api-key-cancel-btn');
+            apiKeySaveBtn = document.getElementById('api-key-save-btn');
+
+            teacherDashboardPanel = document.getElementById('teacher-dashboard-panel');
+            pendingCountBadge = document.getElementById('pending-count-badge');
+            btnApiText = document.getElementById('btn-api-text');
+
+            renderGroupSettings();
+            renderFilterTabs();
+            setupEventListeners();
+            connectToFirestore();
+            initBrowserVoices();
+            checkAndApplyTeacherUIMode();
+
+            const unlockAudio = () => {
+                try {
+                    if (!globalAudioCtx) globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    if (globalAudioCtx.state === 'suspended') globalAudioCtx.resume();
+                    
+                    const osc = globalAudioCtx.createOscillator();
+                    const gain = globalAudioCtx.createGain();
+                    gain.gain.setValueAtTime(0, globalAudioCtx.currentTime); 
+                    osc.connect(gain);
+                    gain.connect(globalAudioCtx.destination);
+                    osc.start();
+                    osc.stop(globalAudioCtx.currentTime + 0.1);
+                    
+                    if (window.speechSynthesis) {
+                        const warmup = new SpeechSynthesisUtterance('');
+                        window.speechSynthesis.speak(warmup);
+                    }
+                } catch (e) {}
+                window.removeEventListener('click', unlockAudio);
+                window.removeEventListener('touchstart', unlockAudio);
+            };
+            window.addEventListener('click', unlockAudio);
+            window.addEventListener('touchstart', unlockAudio);
+        });
+
+        function checkAndApplyTeacherUIMode() {
+            const hasKey = localStorage.getItem('gemini_api_key');
+            if (hasKey) {
+                teacherDashboardPanel.classList.remove('hidden');
+                btnApiText.textContent = "⚙️ 분석 중계소 설정 (가동 중)";
+                btnApiSettings.classList.add('bg-amber-500/20', 'hover:bg-amber-500/30', 'border-amber-400/40');
+            } else {
+                teacherDashboardPanel.classList.add('hidden');
+                btnApiText.textContent = "🔑 AI 분석국 설정 (교사용)";
+                btnApiSettings.classList.remove('bg-amber-500/20', 'hover:bg-amber-500/30', 'border-amber-400/40');
+            }
+        }
+
+        function initBrowserVoices() {
+            if (!window.speechSynthesis) return;
+            browserVoices = window.speechSynthesis.getVoices();
+            if (window.speechSynthesis.onvoiceschanged !== undefined) {
+                window.speechSynthesis.onvoiceschanged = () => { browserVoices = window.speechSynthesis.getVoices(); };
+            }
+        }
+
+        function renderGroupSettings() {
+            groupSelector.innerHTML = '';
+            groups.forEach(g => {
+                const isActive = g.id === selectedMyGroup;
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = `p-3 rounded-2xl font-bold border transition text-center text-sm ${isActive ? `${g.color} text-white border-transparent shadow-md` : 'bg-white text-slate-700 border-slate-200 hover:bg-rose-50/50'}`;
+                button.textContent = g.name;
+                button.onclick = () => { 
+                    selectedMyGroup = g.id; 
+                    renderGroupSettings(); 
+                    // 모둠을 바꾸면 대본 피드 카드들의 삭제 권한이 실시간 변경되므로 다시 그려줌
+                    filterAndRenderFeed();
+                };
+                groupSelector.appendChild(button);
+            });
+            const cg = groups.find(g => g.id === selectedMyGroup);
+            currentGroupBadge.className = `p-2 rounded-xl font-bold text-xs ${cg.color} text-white`;
+            currentGroupBadge.textContent = cg.name;
+        }
+
+        function renderFilterTabs() {
+            feedFilterTabs.innerHTML = '';
+            const allTab = document.createElement('button');
+            allTab.className = `px-4 py-2 rounded-2xl text-sm font-bold transition flex items-center gap-2 ${activeFilterGroup === 'all' ? 'bg-rose-500 text-white shadow-md' : 'text-slate-600 hover:bg-rose-50'}`;
+            allTab.innerHTML = `🌈 모든 모둠 보기`;
+            allTab.onclick = () => { activeFilterGroup = 'all'; renderFilterTabs(); filterAndRenderFeed(); };
+            feedFilterTabs.appendChild(allTab);
+
+            groups.forEach(g => {
+                const isSelected = activeFilterGroup === g.id;
+                const tab = document.createElement('button');
+                tab.className = `px-4 py-2 rounded-2xl text-sm font-bold transition ${isSelected ? `${g.color} text-white shadow-md` : 'text-slate-600 hover:bg-rose-50'}`;
+                tab.textContent = g.name;
+                tab.onclick = () => { activeFilterGroup = g.id; renderFilterTabs(); filterAndRenderFeed(); };
+                feedFilterTabs.appendChild(tab);
+            });
+        }
+
+        // 📡 파이어베이스 실시간 수신 및 자동 중계 대리 분석 처리 엔진 이식
+        let isProcessingQueue = false;
+
+        function connectToFirestore() {
+            try {
+                const ref = collection(db, 'scripts');
+                onSnapshot(ref, async (snapshot) => {
+                    const data = [];
+                    let pendingCount = 0;
+                    const pendingScripts = [];
+
+                    snapshot.forEach(doc => { 
+                        const scriptData = { id: doc.id, ...doc.data() };
+                        data.push(scriptData); 
+
+                        // ⚠️ 교사 모드일 때, 아직 번역이 완료되지 않은 "대기 중(pending)" 대본을 분류 수집합니다.
+                        if (scriptData.status === 'pending') {
+                            pendingCount++;
+                            pendingScripts.push(scriptData);
+                        }
+                    });
+
+                    // 파이어베이스 생성 날짜를 기준으로 오름차순 정렬 (가장 오래된 대본이 인덱스 0번으로)
+                    data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                    sharedScripts = data;
+                    
+                    connectionDot.className = "inline-block w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse";
+                    connectionStatus.textContent = "실시간 서버 연결 완료";
+                    
+                    // 대기 배지 업데이트
+                    pendingCountBadge.textContent = pendingCount;
+
+                    filterAndRenderFeed();
+
+                    // 📡 [자동 번역 대행 서버 가동]: 교사 API 키가 있고 대기 중인 대본이 있을 때 백그라운드 자동 번역
+                    const teacherKey = localStorage.getItem('gemini_api_key');
+                    if (teacherKey && pendingScripts.length > 0 && !isProcessingQueue) {
+                        isProcessingQueue = true;
+                        
+                        // ⚠️ [보완 완료 ②] 오래된 대본 순서대로 순차적인 큐 가공 처리 실행 (for...of 채택)
+                        // 생성 시간 순으로 오름차순 정렬하여 가장 오래 대기한 모둠 것부터 순서대로 처리
+                        pendingScripts.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+                        
+                        try {
+                            for (const scriptToProcess of pendingScripts) {
+                                await processPendingScriptsQueue(scriptToProcess);
+                            }
+                        } finally {
+                            isProcessingQueue = false;
+                        }
+                    }
+                }, (error) => {
+                    connectionDot.className = "inline-block w-2.5 h-2.5 bg-amber-400 rounded-full animate-pulse";
+                    connectionStatus.textContent = "로컬 모드 구동";
+                });
+            } catch (e) {
+                connectionStatus.textContent = "네트워크 우회 백업";
+            }
+        }
+
+        // 📡 교사 백그라운드 분석 대행 프로세서 (단일 문서 정밀 순차 처리)
+        async function processPendingScriptsQueue(scriptToProcess) {
+            try {
+                const base64Parts = scriptToProcess.imageUrl.split(',');
+                let mimeType = "image/png";
+                if (base64Parts[0]) {
+                    const mimeMatch = base64Parts[0].match(/:(.*?);/);
+                    if (mimeMatch && mimeMatch[1]) {
+                        mimeType = mimeMatch[1].toLowerCase();
+                    }
+                }
+                const base64Data = base64Parts[1];
+
+                const prompt = `
+                    이 이미지는 초등학교 다문화 연극 수업용 대본 사진입니다.
+                    다음 규칙을 철저히 숙지하여 정밀 분석을 실시해 주세요:
+
+                    1. 이미지 속 텍스트가 "신짜오", "깜온", "니하오", "예꺄해"와 같은 "한글 발음 기호"로 적혀 있거나, 해당 언어들의 기본 일상 대사일 경우:
+                       - AI는 이것들이 소리나는 대로 한글로 받아 적은 다국어 발음이거나 해당 다문화 언어들임을 즉시 이해해야 합니다.
+                       
+                       - ★[중요] 우르두어 분석 규칙:
+                         우르두어 문장이 들어올 경우, 반드시 실제 우르두 문자(지렁이 문자)를 가장 맨 앞에 명확히 출력해 주어야 합니다.
+                         형식은 무조건 "우르두문자 [영문알파벳표기]" 구조여야 합니다.
+                         예: "میں نو سال کا ہوں [Main nau saal ka hoon]"
+                         이렇게 앞단에 실제 우르두 문자가 있어야 컴퓨터가 완벽한 우르두 원어 발음으로 소리 내게 됩니다.
+                       
+                       - 중국어, 우르두어뿐만 아니라 베트남어에 대해서도 반드시 대괄호안에 한글 발음을 함께 적어주셔야 합니다!
+                         (예: 베트남어 "Xin chào"가 스캔되었다면 원문('original') 필드에 반드시 "Xin chào [신짜오]" 형식으로 한글 발음을 소괄호 또는 대괄호와 함께 정교히 출력하십시오.)
+                       
+                       - 뜻('meaning') 필드에 이에 맞는 올바른 한국어 번역 뜻(예: "안녕하세요")을 정확하게 매칭하십시오.
+                       - 언어명('language') 필드에는 올바른 외국어 명칭("베트남어", "중국어", "우르두어" 등)을 채워주십시오.
+
+                    2. 이미지 속에 아랍-페르시아 문자(우르두어) 혹은 성조 기호가 포함된 베트남어나 중국어가 있을 경우 이펙트 있게 정밀 스캔하여 JSON 포맷으로 번역하십시오.
+                    
+                    3. 우르두어 손글씨 가독성 문제로 인해 "ہیلو" (안녕/헬로)가 "بیلو" (Bilo)처럼 보일지라도, 이는 초등학교 대본 맥락이므로 100% "안녕"의 오독입니다. 무조건 "ہیلو" (안녕/헬로)로 강제 교정하여 출력하십시오.
+
+                    4. ★[매우 중요] 순수 한국어 대사는 결과 JSON에 포함하지 마십시오.
+                       - 예: "어서 와, 유아!", "엄마, 제 친구 유아랑..."처럼 한국어로만 된 대사는 번역/분석 카드에서 제외합니다.
+                       - 한국어 대사는 대본 맥락을 이해하는 용도로만 참고하고, 결과에는 베트남어·중국어·우르두어 등 외국어 대사만 포함합니다.
+                       - 한글로 적힌 외국어 발음 기호(예: 신짜오, 깜온, 니하오, 예꺄해)는 외국어 대사로 보고 실제 원어 표기와 뜻을 복원하여 포함할 수 있습니다.
+                       - 이미지 안에 외국어 대사가 하나도 없으면 빈 배열 []만 반환합니다.
+
+                    반드시 다른 설명 없이 아래 JSON 포맷으로만 응답하세요.
+                    [{"original": "원어 대사 [한글 발음]", "meaning": "한국어 뜻", "language": "언어명", "explanation": "친절한 해설"}]
+                `;
+
+                // 구글 AI 통신 대행 실행
+                const responseText = await analyzeImageWithGemini(base64Data, mimeType, prompt);
+                const parsedTranslations = JSON.parse(responseText.trim());
+
+                // 한국어 대사가 카드로 뜨지 않도록 최종 필터링합니다.
+                // AI가 실수로 한국어 대사를 포함하더라도, 외국어 학습 대상만 남깁니다.
+                const trans = Array.isArray(parsedTranslations) ? parsedTranslations.filter(item => {
+                    const lang = (item.language || '').trim();
+                    const original = (item.original || '').trim();
+                    const originalWithoutPronunciation = original
+                        .replace(/\[.*?\]/g, '')
+                        .replace(/\(.*?\)/g, '')
+                        .trim();
+
+                    if (!original) return false;
+                    if (lang.includes('한국') || lang.toLowerCase().includes('korean')) return false;
+
+                    const hasForeignScript = /[A-Za-zÀ-ỹ一-鿿؀-ۿ]/.test(originalWithoutPronunciation);
+                    const hasForeignLanguageName = ['베트남', '중국', '우르두', 'Vietnamese', 'Chinese', 'Urdu'].some(name => lang.includes(name));
+                    const hasForeignHangulHint = /(신짜오|깜온|깜언|니하오|짜이찌엔|반 뗀|민 뗀|씬 로이|시에시에|예꺄해)/.test(originalWithoutPronunciation);
+
+                    return hasForeignScript || hasForeignLanguageName || hasForeignHangulHint;
+                }) : [];
+
+                // 파이어베이스 DB 문서 실시간 결과 주입 업데이트 및 상태 해제(success)
+                const docRef = doc(db, 'scripts', scriptToProcess.id);
+                await updateDoc(docRef, {
+                    translations: trans,
+                    status: 'success'
+                });
+                showToast(`🔔 ${scriptToProcess.desc} 대본 자동 분석이 실시간 완료되었습니다!`, "success");
+            } catch (err) {
+                console.error("중계 분석 오류: ", err);
+                const docRef = doc(db, 'scripts', scriptToProcess.id);
+                await updateDoc(docRef, {
+                    translations: [{
+                        original: "분석 불가 [Error]",
+                        meaning: "구글 AI 분석국 응답 대기 초과",
+                        language: "안내",
+                        explanation: "서버가 혼잡하여 분석이 다소 지연 중입니다. 교사 대시보드 상태를 확인 후 잠시 후 다시 전송 버튼을 누르시면 정상화됩니다!"
+                    }],
+                    status: 'error'
+                });
+            }
+        }
+
+        function filterAndRenderFeed() {
+            const filtered = activeFilterGroup === 'all' ? sharedScripts : sharedScripts.filter(s => s.groupId === activeFilterGroup);
+            if (filtered.length === 0) {
+                scriptFeed.innerHTML = '';
+                scriptFeed.appendChild(emptyFeedPlaceholder);
+                emptyFeedPlaceholder.classList.remove('hidden');
+                return;
+            }
+            emptyFeedPlaceholder.classList.add('hidden');
+            scriptFeed.innerHTML = '';
+
+            filtered.forEach(script => {
+                const gInfo = groups.find(g => g.id === script.groupId) || { name: '일반', color: 'bg-slate-500' };
+                const time = script.createdAt ? new Date(script.createdAt.seconds * 1000).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '방금 전';
+                
+                // 대기 중 상태 UI 템플릿 처리
+                const isPending = script.status === 'pending';
+                const isError = script.status === 'error';
+
+                const card = document.createElement('article');
+                card.className = "bg-white rounded-3xl p-6 shadow-sm border border-rose-100 flex flex-col gap-5 relative overflow-hidden";
+                
+                // ⚠️ [보안 제한]: 선택된 모둠이 현재 대본의 모둠과 같거나, 교사 API 키가 로컬에 등록된 권한자만 휴지통 아이콘 노출
+                const canDelete = (script.groupId === selectedMyGroup) || localStorage.getItem('gemini_api_key');
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="${gInfo.color} text-white text-xs font-extrabold px-3.5 py-1.5 rounded-full">${gInfo.name}</span>
+                            <span class="text-xs text-slate-400">${time}</span>
+                        </div>
+                        ${canDelete ? `
+                            <button class="delete-btn text-slate-300 hover:text-rose-500 p-1.5 rounded-xl transition-colors">
+                                <i class="fa-regular fa-trash-can text-lg"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                    ${script.desc ? `<p class="text-slate-700 text-sm font-semibold bg-rose-50/50 p-3 rounded-2xl border-l-4 border-rose-400">${escapeHtml(script.desc)}</p>` : ''}
+                    
+                    <div class="w-full flex justify-center bg-slate-900 rounded-3xl overflow-hidden relative group max-h-[280px]">
+                        <img src="${script.imageUrl}" class="w-full h-full max-h-[280px] object-contain cursor-pointer" onclick="window.openImageModal('${script.imageUrl}', '${gInfo.name} 대본')" />
+                    </div>
+
+                    <div class="mt-2 border-t border-rose-100/60 pt-4 w-full">
+                        ${isPending ? `
+                            <!-- 분석 대기 로딩 카드 -->
+                            <div class="bg-amber-50 p-6 rounded-2xl border border-amber-200/50 text-center flex flex-col items-center justify-center gap-3 animate-pulse">
+                                <div class="animate-spin rounded-full h-6 w-6 border-2 border-amber-600 border-t-transparent"></div>
+                                <h4 class="font-bold text-sm text-amber-800">AI가 대본을 읽는 중이에요...</h4>
+                                <p class="text-xs text-amber-600 leading-relaxed">대본 사진이 잘 올라갔어요! 잠시만 기다리면 발음과 뜻이 자동으로 나타나요.</p>
+                            </div>
+                        ` : `
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
+                                ${script.translations.map((item, idx) => `
+                                    <div class="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/40 flex flex-col justify-between">
+                                        <div>
+                                            <p class="text-base font-semibold text-slate-800">${escapeHtml(item.original)}</p>
+                                            <p class="text-sm mt-2 text-slate-700"><span class="text-indigo-600 font-bold">뜻:</span> ${escapeHtml(item.meaning)}</p>
+                                            <p class="text-xs text-slate-500 mt-1">${escapeHtml(item.explanation)}</p>
+                                        </div>
+                                        <div class="mt-4 flex justify-end">
+                                            <button onclick="window.speakText('${escapeHtml(item.original)}', '${escapeHtml(item.language)}')" class="text-xs bg-rose-500 hover:bg-rose-600 text-white font-bold py-1.5 px-3.5 rounded-xl flex items-center gap-1.5">
+                                                <i class="fa-solid fa-volume-high"></i> 발음 듣기
+                                            </button>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `}
+                    </div>
+                `;
+                
+                // ⚠️ [조건부 이벤트 바인딩]: 렌더링된 삭제 버튼이 존재할 때만 안전하게 클릭 이벤트를 연동
+                const deleteBtn = card.querySelector('.delete-btn');
+                if (deleteBtn) {
+                    deleteBtn.onclick = () => { 
+                        scriptIdToDelete = script.id; 
+                        deleteConfirmModal.classList.remove('hidden'); 
+                    };
+                }
+                
+                scriptFeed.appendChild(card);
+            });
+        }
+
+        window.currentPlayingAudio = null;
+        let globalPlaySessionId = 0;
+
+        function normalizeUrduForTTS(text) {
+            return text
+                .replace(/السلام علیکم/g, 'اَلسَّلامُ عَلَیکُم')
+                .replace(/شکریہ/g, 'شُکریہ')
+                .replace(/مسکرائیے/g, 'مُسکرائیے')
+                .replace(/میں/g, 'مَیں')
+                .replace(/\bنو\b/g, 'نَو')
+                .replace(/ایک،?\s*دو،?\s*تین/g, 'ایک، دو، تین')
+                .trim();
+        }
+
+        // --- [초정밀 다국어 크로스-플랫폼 오디오 엔진 & 스마트 슬라이서] ---
+        window.speakText = function(text, langName) {
+            globalPlaySessionId++;
+            const currentSessionId = globalPlaySessionId;
+
+            if (window.currentPlayingAudio) {
+                try {
+                    window.currentPlayingAudio.pause();
+                    window.currentPlayingAudio.src = "";
+                } catch (e) {}
+                window.currentPlayingAudio = null;
+            }
+            if (window.speechSynthesis) {
+                try { window.speechSynthesis.cancel(); } catch(e) {}
+            }
+            if (window.responsiveVoice) {
+                try { window.responsiveVoice.cancel(); } catch(e) {}
+            }
+
+            let cleanText = text.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').trim();
+            
+            const isUrdu = langName.includes('우르두');
+            const isVietnamese = langName.includes('베트남');
+            const isChinese = langName.includes('중국');
+
+            let targetSpeech = cleanText;
+
+            if (isChinese) {
+                let parts = cleanText.split(/[\/\n\:\?\;\-\~]/);
+                let firstPart = parts[0] ? parts[0].trim() : cleanText;
+                targetSpeech = firstPart.replace(/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/g, '').trim();
+            } else if (isUrdu) {
+                const urduWordRegex = /[\u0600-\u06FF]/g;
+                let parts = cleanText.split(/[\[\]\(\)\/]/);
+                let urduCharPart = parts.find(p => urduWordRegex.test(p));
+                targetSpeech = urduCharPart ? urduCharPart.trim() : cleanText;
+                targetSpeech = targetSpeech.replace(/[a-zA-Z]/g, '').replace(/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/g, '').trim();
+
+                targetSpeech = normalizeUrduForTTS(targetSpeech);
+            } else if (isVietnamese) {
+                let parts = cleanText.split(/[\/\n\:\?]/);
+                targetSpeech = parts[0] ? parts[0].trim() : cleanText;
+                targetSpeech = targetSpeech.replace(/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/g, '').trim();
+            }
+
+            if (!targetSpeech) {
+                targetSpeech = cleanText.replace(/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/g, '').trim();
+            }
+
+            let code = 'en';
+            if (isVietnamese) code = 'vi';
+            else if (isChinese) code = 'zh-CN';
+            else if (isUrdu) code = 'ur-PK'; 
+
+            if (!globalAudioCtx) {
+                globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (globalAudioCtx.state === 'suspended') {
+                globalAudioCtx.resume();
+            }
+
+            try {
+                const sampleRate = globalAudioCtx.sampleRate;
+                const silentLength = sampleRate * 0.4; 
+                const silentBuffer = globalAudioCtx.createBuffer(1, silentLength, sampleRate);
+                
+                const channelData = silentBuffer.getChannelData(0);
+                for (let i = 0; i < silentLength; i++) {
+                    channelData[i] = 0.0; 
+                }
+                
+                const bufferSource = globalAudioCtx.createBufferSource();
+                bufferSource.buffer = silentBuffer;
+                bufferSource.connect(globalAudioCtx.destination);
+                bufferSource.start(0); 
+            } catch (e) {
+                console.warn("Warm-up 무음 버퍼 가열 스킵", e);
+            }
+
+            const speechForTTS = isUrdu ? `، ${targetSpeech}` : `.${targetSpeech}`;
+            const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${code}&q=${encodeURIComponent(speechForTTS)}&ttsspeed=${isUrdu ? '0.85' : '0.95'}`;
+
+            let isTtsPlaying = true;
+            // 첫 음절이 잘리는 현상을 줄이기 위해, 실제 발음 전에 아주 짧은 무음 오디오로 스피커를 먼저 깨웁니다.
+            let delayTime = 550;
+            if (isUrdu) {
+                delayTime = 650;
+            } else if (isVietnamese) {
+                delayTime = 650; 
+            }
+
+            setTimeout(async () => {
+                if (currentSessionId !== globalPlaySessionId) return;
+                
+                try {
+                    const audio = new Audio(ttsUrl);
+                    audio.preload = 'auto';
+                    audio.crossOrigin = 'anonymous';
+                    window.currentPlayingAudio = audio;
+
+                    audio.onerror = () => {
+                        if (currentSessionId === globalPlaySessionId) {
+                            isTtsPlaying = false;
+                            executeResponsiveVoiceFallback(targetSpeech, code, currentSessionId);
+                        }
+                    };
+
+                    const waitForAudioReady = () => new Promise((resolve, reject) => {
+                        const done = () => resolve();
+                        const fail = () => reject();
+
+                        audio.addEventListener('canplaythrough', done, { once: true });
+                        audio.addEventListener('error', fail, { once: true });
+                        audio.load();
+
+                        // 일부 브라우저에서는 canplaythrough 이벤트가 늦게 오거나 생략될 수 있어 안전장치를 둡니다.
+                        setTimeout(resolve, 900);
+                    });
+
+                    try {
+                        const warmAudio = new Audio(createSilentWav(0.45));
+                        warmAudio.volume = 0.01;
+                        await warmAudio.play().catch(() => {});
+
+                        await waitForAudioReady();
+
+                        if (currentSessionId !== globalPlaySessionId) return;
+
+                        // 첫 음절 잘림 방지를 위해 실제 재생 직전에 한 번 더 짧게 쉬어 줍니다.
+                        setTimeout(() => {
+                            if (currentSessionId !== globalPlaySessionId) return;
+
+                            try { audio.currentTime = 0; } catch (e) {}
+                            audio.play().catch(() => {
+                                if (currentSessionId === globalPlaySessionId) {
+                                    isTtsPlaying = false;
+                                    executeResponsiveVoiceFallback(targetSpeech, code, currentSessionId);
+                                }
+                            });
+                        }, isUrdu ? 260 : 180);
+                    } catch (warmErr) {
+                        if (currentSessionId === globalPlaySessionId) {
+                            isTtsPlaying = false;
+                            executeResponsiveVoiceFallback(targetSpeech, code, currentSessionId);
+                        }
+                    }
+
+                } catch (err) {
+                    if (currentSessionId === globalPlaySessionId) {
+                        executeResponsiveVoiceFallback(targetSpeech, code, currentSessionId);
+                    }
+                }
+            }, delayTime); 
+        };
+
+        function executeResponsiveVoiceFallback(text, code, sessionId) {
+            if (sessionId !== globalPlaySessionId) return;
+            
+            if (window.responsiveVoice) {
+                try {
+                    let voiceName = "US English Female";
+                    if (code === 'zh-CN') voiceName = "Chinese Female";
+                    else if (code === 'vi') voiceName = "Vietnamese Female";
+                    else if (code.startsWith('ur')) voiceName = "Urdu Female"; 
+
+                    window.responsiveVoice.speak(text, voiceName, {
+                        rate: 0.85,
+                        onerror: () => { executeNativeSpeechEngine(text, code, sessionId); }
+                    });
+                    return;
+                } catch (rvErr) {}
+            }
+            executeNativeSpeechEngine(text, code, sessionId);
+        }
+
+        function executeNativeSpeechEngine(text, code, sessionId) {
+            if (sessionId !== globalPlaySessionId) return;
+            if (!window.speechSynthesis) return;
+
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(text);
+            let voices = window.speechSynthesis.getVoices() || browserVoices;
+            
+            if (code === 'zh-CN') {
+                u.lang = 'zh-CN';
+                const v = voices.find(v => v.lang.includes('zh-CN') || v.lang.toLowerCase().includes('chinese'));
+                if (v) u.voice = v;
+            } else if (code === 'vi') {
+                u.lang = 'vi-VN';
+                const v = voices.find(v => v.lang.toLowerCase().includes('vi-vn') || v.lang.toLowerCase().includes('viet'));
+                if (v) u.voice = v;
+            } else if (code.startsWith('ur')) {
+                const v = voices.find(v => v.lang.toLowerCase().includes('ur-pk') || v.lang.toLowerCase().includes('urdu'));
+                if (v) { 
+                    u.lang = 'ur-PK'; 
+                    u.voice = v; 
+                } else {
+                    const backupVoice = voices.find(v => v.lang.toLowerCase().includes('en-in') || v.lang.toLowerCase().includes('hi-in'));
+                    if (backupVoice) { u.lang = backupVoice.lang; u.voice = backupVoice; } else { u.lang = 'en-US'; }
+                }
+            } else {
+                u.lang = 'en-US';
+            }
+
+            u.rate = 0.8;
+            if (sessionId === globalPlaySessionId) window.speechSynthesis.speak(u);
+        }
+
+        function setupEventListeners() {
+            document.getElementById('tab-file-btn').onclick = () => toggleTab('file');
+            document.getElementById('tab-sample-btn').onclick = () => toggleTab('sample');
+            
+            fileInput.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                loadingSpinner.classList.remove('hidden');
+                loadingText.textContent = "이미지 가속화 및 초고속 압축 중...";
+                
+                const r = new FileReader();
+                r.onload = async (ev) => { 
+                    const rawBase64 = ev.target.result;
+                    
+                    // ⚠️ [보완 완료 ①] 고해상도 휴대폰 카메라 사진 용량을 즉석에서 90% 이상 강제 다이어트 처리 (선생님 요청 세팅: 가로 최대 1400px, 품질 0.8)
+                    const compressedBase64 = await compressImage(rawBase64, 1400, 0.8);
+                    
+                    selectedImageDataUrl = compressedBase64; 
+                    imagePreview.src = compressedBase64; 
+                    imagePreview.classList.remove('hidden'); 
+                    uploadPlaceholder.classList.add('hidden'); 
+                    selectedSourceType = 'file';
+                    
+                    loadingSpinner.classList.add('hidden');
+                };
+                r.readAsDataURL(file);
+            };
+
+            document.querySelectorAll('.sample-btn').forEach(btn => {
+                btn.onclick = function() {
+                    const lang = this.getAttribute('data-lang');
+                    selectedImageDataUrl = generateSampleImage(sampleTextTemplates[lang]);
+                    document.querySelectorAll('.sample-btn').forEach(b => b.classList.remove('border-rose-400', 'bg-rose-50/50'));
+                    this.classList.add('border-rose-400', 'bg-rose-50/50');
+                    selectedSourceType = 'sample';
+                    selectedSampleLanguage = lang;
+                };
+            });
+
+            uploadSubmitBtn.onclick = submitScript;
+            modalCloseBtn.onclick = window.closeImageModal;
+
+            btnZoomIn.onclick = (e) => { e.stopPropagation(); zoomScale += 0.25; updateZoomTransform(); };
+            btnZoomOut.onclick = (e) => { e.stopPropagation(); zoomScale -= 0.25; updateZoomTransform(); };
+            btnZoomReset.onclick = (e) => { e.stopPropagation(); zoomScale = 1.0; panX = 0; panY = 0; updateZoomTransform(); };
+
+            modalViewport.onmousedown = (e) => { e.preventDefault(); isDragging = true; startX = e.clientX - panX; startY = e.clientY - panY; };
+            window.onmousemove = (e) => { if (!isDragging) return; panX = e.clientX - startX; panY = e.clientY - startY; updateZoomTransform(); };
+            window.onmouseup = () => { isDragging = false; };
+
+            document.getElementById('delete-cancel-btn').onclick = () => deleteConfirmModal.classList.add('hidden');
+            document.getElementById('delete-confirm-btn').onclick = async () => {
+                if (scriptIdToDelete) {
+                    await deleteDoc(doc(db, 'scripts', scriptIdToDelete));
+                    deleteConfirmModal.classList.add('hidden');
+                }
+            };
+
+            btnApiSettings.onclick = () => {
+                const savedKey = localStorage.getItem('gemini_api_key') || '';
+                inputApiKey.value = savedKey;
+                apiKeyModal.classList.remove('hidden');
+            };
+
+            apiKeyCancelBtn.onclick = () => {
+                apiKeyModal.classList.add('hidden');
+            };
+
+            apiKeySaveBtn.onclick = () => {
+                const keyVal = inputApiKey.value.trim();
+                if (keyVal) {
+                    localStorage.setItem('gemini_api_key', keyVal);
+                    showToast("선생님 교단 대시보드 분석용 API 키가 안전하게 등록되었습니다!", "success");
+                } else {
+                    localStorage.removeItem('gemini_api_key');
+                    showToast("API 키가 해제되어 일반 학생 모드로 전환됩니다.", "info");
+                }
+                apiKeyModal.classList.add('hidden');
+                checkAndApplyTeacherUIMode();
+                // 키 등록 여부에 따라 삭제 버튼 출력 조건이 변경되므로 피드 재생성
+                filterAndRenderFeed();
+            };
+
+            btnToggleKeyVisibility.onclick = () => {
+                const isPassword = inputApiKey.type === 'password';
+                inputApiKey.type = isPassword ? 'text' : 'password';
+                btnToggleKeyVisibility.innerHTML = isPassword ? `<i class="fa-solid fa-eye-slash"></i>` : `<i class="fa-solid fa-eye"></i>`;
+            };
+        }
+
+        window.openImageModal = function(imageUrl, title) {
+            modalImage.src = imageUrl;
+            modalTitle.textContent = title;
+            zoomScale = 1.0; panX = 0; panY = 0; updateZoomTransform();
+            imageModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        };
+
+        window.closeImageModal = function() { imageModal.classList.add('hidden'); document.body.style.overflow = ''; };
+
+        function updateZoomTransform() {
+            zoomScale = Math.max(0.5, Math.min(zoomScale, 5.0)); 
+            modalZoomContainer.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomScale})`;
+            zoomFactorLabel.textContent = `${Math.round(zoomScale * 100)}%`;
+        }
+
+        function toggleTab(type) {
+            document.getElementById('upload-file-area').classList.toggle('hidden', type !== 'file');
+            document.getElementById('upload-sample-area').classList.toggle('hidden', type !== 'sample');
+            selectedImageDataUrl = null; imagePreview.classList.add('hidden'); uploadPlaceholder.classList.remove('hidden');
+            document.querySelectorAll('.sample-btn').forEach(b => b.classList.remove('border-rose-400', 'bg-rose-50/50'));
+            selectedSourceType = 'file';
+        }
+
+        async function analyzeImageWithGemini(base64Data, mimeType, promptText) {
+            const apiKey = localStorage.getItem('gemini_api_key') || ''; 
+
+            if (!apiKey || apiKey.trim() === "") {
+                throw new Error("선생님 AI 분석국의 승인을 대기하는 중입니다.");
+            }
+            
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+            
+            const payload = { 
+                contents: [{ 
+                    parts: [
+                        { text: promptText }, 
+                        { inlineData: { mimeType: mimeType, data: base64Data } }
+                    ] 
+                }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "ARRAY",
+                        items: {
+                            type: "OBJECT",
+                            properties: {
+                                original: { type: "STRING" },
+                                meaning: { type: "STRING" },
+                                language: { type: "STRING" },
+                                explanation: { type: "STRING" }
+                            },
+                            required: ["original", "meaning", "language", "explanation"]
+                        }
+                    }
+                }
+            };
+
+            let delay = 2000;
+            const maxRetries = 5; 
+
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, { 
+                        method: "POST", 
+                        headers: { 
+                            "Content-Type": "application/json"
+                        }, 
+                        body: JSON.stringify(payload) 
+                    });
+                    
+                    if (response.status === 429) {
+                        throw new Error("429");
+                    }
+                    
+                    if (!response.ok) {
+                        const errText = await response.text();
+                        let errJson;
+                        try { errJson = JSON.parse(errText); } catch(e){}
+                        const errMsg = errJson?.error?.message || errText || `HTTP ${response.status}`;
+                        throw new Error(`구글 서버 오류: ${errMsg}`);
+                    }
+                    
+                    const result = await response.json();
+                    return result.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+                } catch (error) {
+                    if (i === maxRetries - 1) {
+                        if (error.message === "429") {
+                            throw new Error("구글 서버 사용자가 밀집되어 일시 지연 중입니다. 5초 뒤 다시 한 번 천천히 버튼을 눌러주세요!");
+                        }
+                        throw error;
+                    }
+                    const displayDelay = delay / 1000;
+                    document.getElementById('loading-text').textContent = `구글 AI 서버 혼잡을 감지했습니다. 최적화 대기 중... (${displayDelay}초 후 자동 재시도)`;
+                    await new Promise(res => setTimeout(res, delay));
+                    delay *= 2; 
+                }
+            }
+        }
+
+        // 📡 대본 제출 로직 개편: 아이들이 업로드 시 실시간으로 파이어베이스 DB에 'pending' 대기 상태로 등록하여 교사 화면에 분석을 일임합니다.
+        async function submitScript() {
+            if (!selectedImageDataUrl) return;
+            
+            if (isSubmitting) return;
+            isSubmitting = true;
+            
+            uploadSubmitBtn.disabled = true;
+            loadingSpinner.classList.remove('hidden');
+            let trans = [];
+
+            // 샘플 낭독 연습의 경우 이미 사전에 구워진 번역이 있으므로 서버를 탈 필요 없이 즉시 성공 상태로 등록합니다.
+            if (selectedSourceType === 'sample') {
+                if (selectedSampleLanguage === 'vi') {
+                    trans = [
+                        { original: "Xin chào [신짜오]", meaning: "안녕하세요", language: "베트남어", explanation: "베트남의 다정한 인사말입니다." },
+                        { original: "Cảm ơn [깜온]", meaning: "감사합니다", language: "베트남어", explanation: "고마움을 표현하는 단어입니다." }
+                    ];
+                } else if (selectedSampleLanguage === 'ur') {
+                    trans = [
+                        { original: "میں نو سال کا ہوں [Main nau saal ka hoon]", meaning: "저는 9살이에요.", language: "우르두어", explanation: "자신의 나이를 소개하는 문장입니다." },
+                        { original: "آپ کی عمر کیا ہے؟ [Aap ki umar kya hai?]", meaning: "나이가 어떻게 되세요?", language: "우르두어", explanation: "정중하게 상대방의 나이를 묻는 대사입니다." }
+                    ];
+                } else if (selectedSampleLanguage === 'zh') {
+                    trans = [
+                        { original: "Ni hao [Nǐ hǎo]", meaning: "안녕하세요", language: "중국어", explanation: "중국어 기본 인사말입니다." }
+                    ];
+                }
+
+                try {
+                    await addDoc(collection(db, 'scripts'), {
+                        groupId: selectedMyGroup,
+                        imageUrl: selectedImageDataUrl,
+                        desc: scriptDescInput.value.trim() || `${selectedMyGroup} 연습용 샘플 대본`,
+                        translations: trans,
+                        status: 'success', // 즉시 완료 상태
+                        createdAt: serverTimestamp()
+                    });
+                    showToast("연습용 샘플 대본이 로딩 완료되었습니다!", "success");
+                } catch (e) {
+                    showToast("대본 로딩 실패", "error");
+                }
+            } else {
+                // 📡 [실전 아이들 대본 사진 스캔]: API 키를 직접 쓰지 않고 'pending' 상태로 신호만 쏘아 보냅니다!
+                const myGroupObj = groups.find(g => g.id === selectedMyGroup) || { name: "우리 모둠" };
+                const descText = scriptDescInput.value.trim() || `${myGroupObj.name}의 대본 낭독`;
+
+                try {
+                    // DB 등록: status를 'pending'으로 등록하여 교사 대시보드의 백그라운드 구글 분석을 트리거링
+                    await addDoc(collection(db, 'scripts'), {
+                        groupId: selectedMyGroup,
+                        imageUrl: selectedImageDataUrl, // ⚠️ 이미 초고속 압축처리가 되어있어 가볍게 Firestore에 바로 이식됩니다!
+                        desc: descText,
+                        translations: [], // 아직 없음
+                        status: 'pending', // 교탁 대시대기
+                        createdAt: serverTimestamp()
+                    });
+                    
+                    showToast("우리 모둠 공간에 대본 공유 완료! AI 분석 대기 중...", "success");
+                } catch (e) {
+                    showToast("대본 공유 실패", "error");
+                }
+            }
+
+            uploadSubmitBtn.disabled = false;
+            loadingSpinner.classList.add('hidden');
+            scriptDescInput.value = '';
+            toggleTab('file');
+            isSubmitting = false; 
+        }
+
+        function generateSampleImage(text) {
+            const c = document.createElement('canvas'); c.width = 500; c.height = 300;
+            const ctx = c.getContext('2d'); ctx.fillStyle = '#fefdfa'; ctx.fillRect(0,0,500,300);
+            ctx.fillStyle = '#1e293b'; ctx.font = '14px sans-serif';
+            text.split('\n').forEach((l, i) => ctx.fillText(l, 40, 50 + i*30));
+            return c.toDataURL('image/jpeg');
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            let iconClass = 'fa-circle-info text-blue-500', bgBorder = 'bg-white border-blue-100';
+            if (type === 'success') { iconClass = 'fa-circle-check text-green-500'; bgBorder = 'bg-white border-green-100'; }
+            else if (type === 'error') { iconClass = 'fa-circle-exclamation text-rose-500'; bgBorder = 'bg-white border-rose-100'; }
+
+            toast.className = `flex items-center gap-3 px-4 py-3 rounded-2xl border shadow-lg ${bgBorder} transition duration-300 transform translate-y-2 opacity-0 max-w-sm z-50`;
+            toast.innerHTML = `<i class="fa-solid ${iconClass} text-lg"></i><p class="text-xs font-bold text-slate-700 leading-tight">${escapeHtml(message)}</p>`;
+            document.getElementById('toast-container').appendChild(toast);
+            setTimeout(() => toast.classList.remove('translate-y-2', 'opacity-0'), 10);
+            setTimeout(() => { toast.classList.add('translate-y-2', 'opacity-0'); setTimeout(() => toast.remove(), 300); }, 4000);
+        }
+
+        function escapeHtml(t) { return t ? t.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m])) : ''; }
+    </script>
+</body>
+</html>
